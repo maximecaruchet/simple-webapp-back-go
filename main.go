@@ -7,9 +7,14 @@ import (
 	"net/http"
 )
 
-type Metadata struct {
+type MetadataArray struct {
 	Data   []database.User `json:"data"`
 	Status string          `json:"status"`
+}
+
+type MetadataSimple struct {
+	Data   database.User `json:"data"`
+	Status string        `json:"status"`
 }
 
 func addUser(db *database.Database, user database.User) (database.User, error) {
@@ -22,26 +27,45 @@ func listUsers(db *database.Database) ([]database.User, error) {
 
 func userHandler(db *database.Database, w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
+		log.Info("post user")
+
 		decoder := json.NewDecoder(r.Body)
 
 		var user database.User
-		err := decoder.Decode(&user)
-		if err != nil {
-			log.Error(err)
+		errDecode := decoder.Decode(&user)
+		if errDecode != nil {
+			log.Error(errDecode)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		_, errAddUser := addUser(db, user)
 		if errAddUser != nil {
-			log.Error(err)
+			log.Error(errAddUser)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
+		b, errJsonMarshal := json.Marshal(MetadataSimple{
+			Data:   user,
+			Status: "OK",
+		})
+		if errJsonMarshal != nil {
+			log.Error(errJsonMarshal)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		_, errWrite := w.Write(b)
+		if errWrite != nil {
+			log.Error(errWrite)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 	if r.Method == http.MethodGet {
+		log.Info("list users")
+
 		users, errListUsers := listUsers(db)
 		if errListUsers != nil {
 			log.Error(errListUsers)
@@ -49,12 +73,12 @@ func userHandler(db *database.Database, w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		b, errJsonMarshal := json.Marshal(Metadata{
+		b, errJsonMarshal := json.Marshal(MetadataArray{
 			Data:   users,
 			Status: "OK",
 		})
 		if errJsonMarshal != nil {
-			log.Error(errListUsers)
+			log.Error(errJsonMarshal)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
